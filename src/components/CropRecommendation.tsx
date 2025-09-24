@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { ArrowLeft, Info } from 'lucide-react';
+import CropRecommendationModel, { CropInputData, CropPrediction } from '../models/CropRecommendationModel';
 
 interface CropRecommendationProps {
   onBack?: () => void;
 }
 
 const CropRecommendation: React.FC<CropRecommendationProps> = ({ onBack }) => {
+  const [model] = useState(() => new CropRecommendationModel());
   const [formData, setFormData] = useState({
     nitrogen: '',
     phosphate: '',
@@ -16,8 +18,9 @@ const CropRecommendation: React.FC<CropRecommendationProps> = ({ onBack }) => {
     rainfall: ''
   });
 
-  const [recommendation, setRecommendation] = useState<string | null>(null);
+  const [predictions, setPredictions] = useState<CropPrediction[] | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({
@@ -26,38 +29,34 @@ const CropRecommendation: React.FC<CropRecommendationProps> = ({ onBack }) => {
     }));
   };
 
-  const generateRecommendation = () => {
+  const generateRecommendation = async () => {
     setIsLoading(true);
+    setError(null);
     
-    // Simulate AI processing
-    setTimeout(() => {
-      const crops = ['Wheat', 'Rice', 'Cotton', 'Maize', 'Sugarcane', 'Soybean'];
-      const conditions = {
+    try {
+      // Wait for model to load if not already loaded
+      while (!model.isModelLoaded()) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+
+      const inputData: CropInputData = {
         nitrogen: parseFloat(formData.nitrogen),
-        phosphate: parseFloat(formData.phosphate),
+        phosphorus: parseFloat(formData.phosphate),
         potassium: parseFloat(formData.potassium),
-        temp: parseFloat(formData.temp),
+        temperature: parseFloat(formData.temp),
         humidity: parseFloat(formData.humidity),
         ph: parseFloat(formData.ph),
         rainfall: parseFloat(formData.rainfall)
       };
 
-      // Simple recommendation logic based on conditions
-      let recommendedCrop = 'Coffee Wheat'; // Default as shown in screenshot
-      
-      if (conditions.ph >= 6.0 && conditions.ph <= 7.5 && conditions.temp >= 20 && conditions.temp <= 30) {
-        if (conditions.rainfall >= 500) {
-          recommendedCrop = 'Rice';
-        } else if (conditions.nitrogen >= 50) {
-          recommendedCrop = 'Wheat';
-        }
-      } else if (conditions.temp >= 25 && conditions.humidity >= 60) {
-        recommendedCrop = 'Cotton';
-      }
-
-      setRecommendation(recommendedCrop);
+      const cropPredictions = await model.predict(inputData);
+      setPredictions(cropPredictions);
+    } catch (err) {
+      setError('Failed to generate crop recommendations. Please try again.');
+      console.error('Crop recommendation error:', err);
+    } finally {
       setIsLoading(false);
-    }, 2000);
+    }
   };
 
   return (
@@ -182,20 +181,73 @@ const CropRecommendation: React.FC<CropRecommendationProps> = ({ onBack }) => {
             disabled={isLoading || Object.values(formData).some(val => !val)}
             className="w-full bg-blue-500 text-white py-3 rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            {isLoading ? 'Analyzing...' : 'Get Crop Recommendation'}
+            {isLoading ? 'Analyzing with AI Model...' : 'Get Crop Recommendation'}
           </button>
         </div>
 
-        {recommendation && (
-          <div className="mt-6 p-4 bg-green-50 border border-green-200 rounded-lg">
-            <div className="flex items-center mb-2">
-              <Info className="text-green-600 mr-2" size={20} />
-              <h3 className="font-semibold text-green-800">Recommended Crop</h3>
+        {error && (
+          <div className="mt-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+            <p className="text-red-700">{error}</p>
+          </div>
+        )}
+
+        {predictions && (
+          <div className="mt-6 space-y-4">
+            <h3 className="font-semibold text-gray-800 flex items-center">
+              <Info className="text-blue-600 mr-2" size={20} />
+              AI Crop Recommendations
+            </h3>
+            
+            {predictions.map((prediction, index) => (
+              <div key={index} className={`p-4 rounded-lg border ${
+                index === 0 
+                  ? 'bg-green-50 border-green-200' 
+                  : 'bg-gray-50 border-gray-200'
+              }`}>
+                <div className="flex justify-between items-start mb-2">
+                  <div>
+                    <h4 className={`font-medium ${
+                      index === 0 ? 'text-green-800' : 'text-gray-800'
+                    }`}>
+                      {index + 1}. {prediction.crop}
+                      {index === 0 && <span className="ml-2 text-xs bg-green-100 text-green-700 px-2 py-1 rounded">Best Match</span>}
+                    </h4>
+                  </div>
+                  <div className="text-right">
+                    <div className={`text-sm font-medium ${
+                      index === 0 ? 'text-green-700' : 'text-gray-700'
+                    }`}>
+                      {prediction.confidence.toFixed(1)}% Confidence
+                    </div>
+                    <div className={`text-xs ${
+                      index === 0 ? 'text-green-600' : 'text-gray-600'
+                    }`}>
+                      Suitability: {prediction.suitabilityScore.toFixed(0)}/100
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Confidence bar */}
+                <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
+                  <div 
+                    className={`h-2 rounded-full ${
+                      index === 0 ? 'bg-green-500' : 'bg-blue-500'
+                    }`}
+                    style={{ width: `${prediction.confidence}%` }}
+                  ></div>
+                </div>
+                
+                {index === 0 && (
+                  <p className="text-green-600 text-sm">
+                    This crop is most suitable based on your soil and climate conditions.
+                  </p>
+                )}
+              </div>
+            ))}
+            
+            <div className="text-xs text-gray-500 mt-4">
+              * Recommendations generated using machine learning model trained on agricultural data
             </div>
-            <p className="text-green-700 text-lg font-medium">{recommendation}</p>
-            <p className="text-green-600 text-sm mt-1">
-              Based on your soil and climate conditions, this crop is most suitable for optimal yield.
-            </p>
           </div>
         )}
       </div>
