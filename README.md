@@ -1,5 +1,11 @@
 # AI-Based Farmer Query Support and Advisory System
 
+Team Name:- Spartans
+--
+Problem Statement ID:- SIH25076
+--
+Theme:- Agriculture
+---
 ## 🚨 Problem Overview
 
 Build a An AI-based app where farmers can ask questions using voice or text in their local language:
